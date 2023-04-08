@@ -1,0 +1,112 @@
+# tax data pull for 2022
+# pulls just eth
+
+#basic info
+library(shroomDK)
+api = "[paste your api key here]"
+
+# get the sales data for wallet #1
+nft_sales_query <- "
+SELECT BLOCK_TIMESTAMP, NFT_ADDRESS, PROJECT_NAME, PRICE_USD, TOTAL_FEES_USD, TOKENID
+FROM ethereum.core.ez_nft_sales
+  WHERE BLOCK_TIMESTAMP >= '2021-12-31 12:00:00' AND 
+  BLOCK_TIMESTAMP <= '2023-01-01 16:00:00' AND 
+  SELLER_ADDRESS = LOWER('[paste wallet #1 address here]')
+  ORDER BY BLOCK_NUMBER DESC 
+"
+a22 = auto_paginate_query(query=nft_sales_query, api_key=api)
+
+# get the sales data for wallet #2
+nft_sales_query <- "
+SELECT BLOCK_TIMESTAMP, NFT_ADDRESS, PROJECT_NAME, PRICE_USD, TOTAL_FEES_USD, TOKENID
+FROM ethereum.core.ez_nft_sales
+  WHERE BLOCK_TIMESTAMP >= '2021-12-31 12:00:00' AND 
+  BLOCK_TIMESTAMP <= '2023-01-01 16:00:00' AND 
+  SELLER_ADDRESS = LOWER('[paste wallet #2 address here]')
+  ORDER BY BLOCK_NUMBER DESC 
+"
+a69 = auto_paginate_query(query=nft_sales_query, api_key=api)
+
+# combine the sells
+a = rbind(a22, a69)
+sold2022 = a
+sold_unq = paste(sold2022$NFT_ADDRESS, sold2022$TOKENID)
+
+
+
+###################
+###################
+
+# get the buying data for wallet #1
+nft_buys_query <- "
+SELECT BLOCK_TIMESTAMP, NFT_ADDRESS, PROJECT_NAME, PRICE_USD, TOTAL_FEES_USD, TOKENID
+FROM ethereum.core.ez_nft_sales
+  WHERE BLOCK_TIMESTAMP <= '2023-01-01 16:00:00' AND 
+  BUYER_ADDRESS = LOWER('[paste wallet #1 address here]')
+  ORDER BY BLOCK_NUMBER DESC 
+"
+a22 = auto_paginate_query(query=nft_buys_query, api_key=api)
+
+# get the buying data for wallet #2
+nft_buys_query <- "
+SELECT BLOCK_TIMESTAMP, NFT_ADDRESS, PROJECT_NAME, PRICE_USD, TOTAL_FEES_USD, TOKENID
+FROM ethereum.core.ez_nft_sales
+  WHERE BLOCK_TIMESTAMP <= '2023-01-01 16:00:00' AND 
+  BUYER_ADDRESS = LOWER('[paste wallet #2 address here]')
+  ORDER BY BLOCK_NUMBER DESC 
+"
+a69 = auto_paginate_query(query=nft_buys_query, api_key=api)
+
+bought = rbind(a22, a69)
+bought_unq = paste(bought$NFT_ADDRESS, bought$TOKENID)
+
+
+# which tokens have multiple sales?
+sl = unique(sold_unq)
+for(i in 1:length(sl)){
+  u = subset(c(1:length(sold_unq)), sold_unq==sl[i])
+  if(length(u)>1){print(i)}
+}
+
+# match up the purchase and sales prices for those with just one sale
+bt = matrix(NA, length(sold2022[,1]), 1)
+net = matrix(NA, length(sold2022[,1]), 1)
+for(i in 1:length(sold_unq)){
+  u = subset(bought, bought_unq==sold_unq[i])
+  if(length(u[,1])==1){
+    bt[i] = u$PRICE_USD-u$TOTAL_FEES_USD
+    net[i] = (sold2022$PRICE_USD[i]-sold2022$TOTAL_FEES_USD[i])-(u$PRICE_USD-u$TOTAL_FEES_USD)
+  }
+}
+
+
+################################
+# get the mints
+################################
+
+# get the buying data for wallet #1
+nft_mint_query <- "
+SELECT BLOCK_TIMESTAMP, NFT_ADDRESS, PROJECT_NAME, MINT_PRICE_USD, TOKENID
+FROM ethereum.core.ez_nft_mints
+  WHERE BLOCK_TIMESTAMP <= '2023-01-01 16:00:00' AND 
+  NFT_TO_ADDRESS = LOWER('[paste wallet #1 address here]')
+  ORDER BY BLOCK_NUMBER DESC 
+"
+a22 = auto_paginate_query(query=nft_mint_query, api_key=api)
+
+# get the buying data for wallet #2
+nft_mint_query <- "
+SELECT BLOCK_TIMESTAMP, NFT_ADDRESS, PROJECT_NAME, MINT_PRICE_USD, TOKENID
+FROM ethereum.core.ez_nft_mints
+  WHERE BLOCK_TIMESTAMP <= '2023-01-01 16:00:00' AND 
+  NFT_TO_ADDRESS = LOWER('[paste wallet #2 address here]')
+  ORDER BY BLOCK_NUMBER DESC  
+"
+a69 = auto_paginate_query(query=nft_mint_query, api_key=api)
+
+minted = rbind(a22, a69)
+
+setwd("[paste output dir here]")
+write.table(minted, "minted_nfts.csv", sep=",", row.names=F)
+write.table(data.frame(sold2022, bt, net), "sold_nfts.csv", sep=",", row.names=F)
+write.table(bought, "bought_nfts.csv", sep=",", row.names=F)
